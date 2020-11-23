@@ -1,0 +1,421 @@
+
+---
+title: 'Predicting Type II Diabetes with Early Symptoms '
+author: "Rhayoung Park"
+date: "11/15/20"
+output:
+  pdf_document:
+    latex_engine: xelatex
+  word_document: default
+always_allow_html: yes
+---
+
+```{r setup, include=FALSE}
+# DO NOT ALTER CODE IN THIS CHUNK
+# The very first time you use this R markdown file, you should install each of the packages below.
+# The same goes for other packages you might decide to use
+# Remember that you only need to install each R package once in R (ever -- unless you change computers).
+# All you need to do whenever you need to use the package again (after restarting the R session),
+# is to use the library function to call the package.
+# For example, type install.packages("knitr") in the console to install the knitr package. 
+knitr::opts_chunk$set(echo = FALSE)
+library(knitr)
+library(dplyr)
+library(ggplot2)
+library(lme4)
+library(pander)
+library(xtable)
+library(kableExtra)
+library(arm)
+library(pROC)
+library(e1071)
+library(caret)
+library(tidyverse)
+require(gridExtra)
+library(broom)
+library(sjPlot)
+library(ggpubr)
+library(rms)
+```
+
+
+* * *
+\newpage
+
+## Summary
+
+Diabetes is a serious problem all over the world. Thus, this study aims to seek: (i) is there any significant early symptoms for predicting diabetes, excluding the symptoms obesity, polyuria, polydipsia and polyphagia, (ii) is itching a significant early symptom of diabetes, (iii) if yes, how does itching interact with other predictors. As a result, polydipsia, polyuria, gender, irritability, genital thrush, partial paresis, polyphagia, age, visual blurring and itching was significant predictors for diabetes. Also, the interaction between itching and visual blurring was statistically significant. 
+
+## Introduction
+
+Diabetes mellitus (hereafter, referred as diabetes) is one of the most largely suffered disease around the world. It can be classified into type I and type II. People with type I diabetes do not produce insulin. On the other hand, people with type II diabetes do produce insulin but do not respond to insulin. This study focuses on type II diabetes.
+
+According to Olokoba et al., it is estimated that 522 million people would have type II diabetes by 2030 (2012). According to American Diabetes Association, the total healthcare cost related to just one specific disease accounts for 1.7% of the total GDP. It is also the 7th leading cause of death in the states, and more people die of diabetes than breast cancer and AIDS combined. USA is not the only country suffering from diabetes. A research conducted by Rahim et al., proved that people suffering from diabetes in Bangladesh increased by 6.8% in five years (2007). Although the population suffering from type II diabetes grows every day, people are still not aware of some early symptoms of diabetes. Understanding early symptoms can lead to early detection of diabetes. This is critical because it can lead to controlling the seriousness, save huge amount of hospital costs and in some cases prevent the disease from developing (Habib, Samira Humaira, et al., 2010). A research showed that one can save $6658 if they detect diabetes at an earlier stage (Habib, Samira Humaira, et al., 2010). 
+
+Some early symptoms such as obesity, polyuria, polydipsia and polyphagia are well-known (Olokoba et al., 2012) but other symptoms are easily overlooked or regarded as a symptom for other illness. Among all early symptoms, whether itching is associated with diabetes is still debated. Here, itching refers to uncomfortable feeling in skin, eventually making people to scratch (Moyes, V., et al., 2006). Itching was first proposed as one of the early symptoms of diabetes in 1964 (Oakley, 1964) but some research argue that itching occurs after being treated with diabetes or as an allergic reaction to the treatment (Moyes, V., et al., 2006). This study attempts to focus on finding significant predictors, whether itching is associated with type II diabetes and also its interaction with other early symptoms using logistic regression.
+
+
+```{r, include=FALSE}
+# Enter your code for loading the data here
+dt <- read.csv('diabetes_data_upload.csv',sep = ',', header = T)
+dt$Gender <- as.factor(dt$Gender)
+dt$Polyuria <- as.factor(dt$Polyuria)
+dt$Polydipsia <- as.factor(dt$Polydipsia)
+dt$Polyphagia <- as.factor(dt$Polyphagia)
+dt$sudden.weight.loss <- as.factor(dt$sudden.weight.loss)
+dt$weakness <- as.factor(dt$weakness)
+dt$Genital.thrush <- as.factor(dt$Genital.thrush)
+dt$visual.blurring <- as.factor(dt$visual.blurring)
+dt$Itching <- as.factor(dt$Itching)
+dt$Irritability <- as.factor(dt$Irritability)
+dt$delayed.healing <- as.factor(dt$delayed.healing)
+dt$partial.paresis <- as.factor(dt$partial.paresis)
+dt$muscle.stiffness <- as.factor(dt$muscle.stiffness)
+dt$Alopecia <- as.factor(dt$Alopecia)
+dt$Obesity <- as.factor(dt$Obesity)
+dt$class <- ifelse(dt$class == 'Positive', "1", "0")
+dt$class <- as.factor(dt$class)
+dt$Age <- as.numeric(dt$Age)
+view(dt)
+```
+
+```{r, include=FALSE}
+NewNames <- c('age', 'gender', 'polyuria', 'polydipsia', 'suddenweightloss', 'weak', 'polyphagia', 'genitalthrush', 'visualblurring', 'itching', 'irritability', 'delayedhealing', 'partialparesis', 'musclestiffness', 'alopecia', 'obesity', 'diabetes')
+names(dt) <- NewNames
+```
+
+## EDA
+
+The data was collected by asking direct questions to the patients of Sylhet Diabetes Hospital in Bangladesh and was approved by a doctor. It could be obtained through UCI Machine Learning Repository. The data is multivariate having 17 attributes and 520 observations in total. 200 people were not diagnosed with diabetes and 320 people had diabetes. The variable ‘diabetes’ was used as the response variable and was predicted by predictors such as ‘age’, ‘gender’, ‘polyuria’, ‘polydipsia’, ‘sudden weight loss’, ‘weakness’, ‘polyphagia’, ‘genital thrush’, ‘visual blurring’, ‘itching’, ‘irritability’, ‘delayed healing’, ‘partial paresis’, ‘muscle stiffness’, ‘alopecia’ and ‘obesity’. All other predictors except age was factored before starting the analysis. There were no missing values in the data. (Appendix A. Codebook)
+
+A histogram of age, the only numeric variable in the data, was plotted to check the overall distribution. Age ranged from 20 to 65 years, and the distribution resembled a normal distribution. The risk of diabetes seemed to be more visible if age was grouped into categories. Thus, age was grouped into 6 categories. (Appendix B)
+
+A chi-squared test was conducted to find out whether each categorical variable is significant. The variables that were not significant at a 0.05 level were ‘itching’ and ‘delayed healing’, and all other variable had chi-squared p-values smaller than 0.05. 
+
+![Summary of Chi-Squared Test](/Users/롸/Desktop/chi.png){width=60%}
+
+Moreover, joint tables were made to check if there are enough data points for each category and also interactions. As shown in the table below, there were not enough data for age under 31, 61-70 and over 71. For all other variables, there were enough data. 
+
+![Binned Age](/Users/롸/Desktop/ed.png){width=80%}
+
+
+
+
+```{r, include=FALSE}
+ggplot(dt,aes(x=age, y=diabetes, fill=age)) +
+  geom_boxplot() + coord_flip() +
+  scale_fill_brewer(palette="RdPu") +
+  labs(title="Age vs Diabetes",
+       x="Age",y="Diabetes") + 
+  theme_classic() + theme(legend.position="none")
+```
+
+
+```{r, include=FALSE}
+tapply(dt$gender, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("gender","diabetes")]))
+```
+
+```{r, include=FALSE}
+tapply(dt$polyuria, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("polyuria","diabetes")]))
+```
+
+```{r, include=FALSE}
+tapply(dt$polydipsia, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("polydipsia","diabetes")]))
+```
+
+```{r, include=FALSE}
+tapply(dt$suddenweightloss, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("suddenweightloss","diabetes")]))
+```
+
+```{r, include=FALSE}
+tapply(dt$weak, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("weak","diabetes")]))
+```
+
+```{r, include=FALSE}
+tapply(dt$polyphagia, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("polyphagia","diabetes")]))
+```
+
+```{r, include=FALSE}
+tapply(dt$genitalthrush, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("genitalthrush","diabetes")]))
+```
+
+```{r, include=FALSE}
+tapply(dt$visualblurring, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("visualblurring","diabetes")]))
+```
+
+```{r, include=FALSE}
+tapply(dt$itching, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("itching","diabetes")]))
+```
+
+```{r, include=FALSE}
+tapply(dt$irritability, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("irritability","diabetes")]))
+```
+
+```{r, include=FALSE}
+tapply(dt$delayedhealing, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("delayedhealing","diabetes")]))
+```
+
+```{r, include=FALSE}
+tapply(dt$partialparesis, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("partialparesis","diabetes")]))
+```
+
+```{r, include=FALSE}
+tapply(dt$musclestiffness, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("musclestiffness","diabetes")]))
+```
+
+```{r, include=FALSE}
+tapply(dt$alopecia, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("alopecia","diabetes")]))
+```
+
+```{r, include=FALSE}
+tapply(dt$obesity, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("obesity","diabetes")]))
+```
+
+```{r, include=FALSE}
+dt$age_bin <- ifelse(dt$age < 31, "1", 
+                           ifelse(dt$age > 30 & dt$age <41, "2",
+                          ifelse(dt$age > 40 & dt$age < 51, "3",
+                          ifelse(dt$age > 50 & dt$age <61, "4", 
+                          ifelse(dt$age>60 & dt$age < 71, "5", "6")))))
+dt$age_bin <- factor(dt$age_bin)
+```
+
+```{r, include=FALSE}
+m1 = glm(diabetes ~  age_bin + gender + polyuria + polydipsia + suddenweightloss + weak + polyphagia + genitalthrush + visualblurring + itching + irritability + delayedhealing + partialparesis + musclestiffness + alopecia + obesity, data = dt, family = binomial(link=logit))
+summary(m1)
+```
+
+
+```{r, echo=FALSE, , include=FALSE}
+table(dt$age_bin, dt$diabetes)
+```
+
+
+```{r, echo=FALSE, , include=FALSE}
+table(dt$itching, dt$gender)
+```
+
+```{r, echo=FALSE, , include=FALSE}
+table(dt$itching, dt$polyphagia)
+```
+
+```{r,echo=FALSE, , include=FALSE}
+table(dt$itching, dt$visualblurring)
+```
+
+```{r, echo=FALSE, , include=FALSE}
+table(dt$itching, dt$irritability)
+```
+
+```{r, echo=FALSE, , include=FALSE}
+table(dt$itching, dt$diabetes)
+```
+
+```{r, echo=FALSE, include=FALSE}
+NullModel <- glm(diabetes ~ 1, data=dt,family=binomial(link="logit"))
+FullModel <- glm(diabetes ~  age_bin + gender + polyuria + polydipsia + suddenweightloss + weak + polyphagia + genitalthrush + visualblurring + itching + irritability + delayedhealing + partialparesis + musclestiffness + alopecia + obesity, data = dt, family = binomial(link=logit))
+
+Model_stepwise <- step(NullModel, scope = formula(FullModel),direction="both",trace=0)
+Model_stepwise$call
+
+summary(Model_stepwise)
+```
+
+```{r, include=FALSE}
+NullModel <- glm(diabetes ~ itching, data=dt,family=binomial(link="logit"))
+FullModel <- glm(diabetes ~  age_bin + gender + polyuria + polydipsia + polyphagia + genitalthrush + visualblurring + itching + irritability + partialparesis
+         + itching:gender
+         + itching:polyphagia
+         + itching:visualblurring
+         + itching:irritability
+         + itching:partialparesis
+         + itching:genitalthrush,
+         data = dt, family = binomial(link=logit))
+
+final <- step(NullModel, scope = formula(FullModel),direction="both",trace=0)
+final$call
+
+summary(final)
+```
+
+# Model
+
+Logistic regression was built with all predictors and interactions with itching. An AIC stepwise model selection was done to identify the optimal combination of predictors. As this analysis specifically aims to look at ‘itching’, the null model included ‘itching’, and the full model included interactions with itching. Since age did not have sufficient data, interaction between itching and age was excluded. As a result of AIC stepwise selection, interaction between ‘itching’ and ‘visual blurring’ was kept and all other interactions were dropped. 
+
+For model assessment, binned residual plot were drawn and VIF values were computed to check multicollinearity. In this process, it turned out that binned age had high VIF values of 9.3. Age was then centered to reduce multicollinearity and the final model was built with centering age. Binned residual plots with age centered was similar to the residual plot with binned age. In conclusion, the final model is:
+
+![Final model](/Users/롸/Desktop/model.png){width=100%}
+
+
+```{r, include=FALSE}
+dt$age_centered <- dt$age - mean(dt$age)
+```
+
+```{r}
+NullModel <- glm(diabetes ~ itching, data=dt,family=binomial(link="logit"))
+FullModel <- glm(diabetes ~  age_centered + gender + polyuria + polydipsia + polyphagia + genitalthrush + visualblurring + itching + irritability + partialparesis
+         + itching:gender
+         + itching:polyphagia
+         + itching:visualblurring
+         + itching:irritability
+         + itching:partialparesis
+         + itching:genitalthrush,
+         data = dt, family = binomial(link=logit))
+
+again22 <- step(NullModel, scope = formula(FullModel),direction="both",trace=0)
+
+pander(summary(again22))
+
+```
+
+
+The intercept in this model represents a female who is 48 years old and does not have symptoms of itching, polydipsia, polyuria, polyphagia, irritability, genital thrush, partial paresis and visual blurring. Itching was a significant predictor of diabetes. Holding everything else constant, people who experienced itching has 83% less odds of having diabetes, compared to people who did not have itching. If they had experienced both itching and visual blurring, the odds of having diabetes were 99% less than people who experienced only itching. 
+
+Polydipsia, polyphagia and polyuria were significant predictors of type II diabetes, which coincides with earlier research. This finding is supported by the research conducted by Pawar et al., which demonstrated that these three symptoms are significant predictor of diabetes as all of them have p-vale less than 0.0001 (2017).
+
+Sex was a significant predictor in this model. Holding everything else constant, if a person is male, then the odds ratio of him being diagnosed with diabetes is 99% less compared to a female. This result contradicts the research conducted by Nordström et al., which concluded that men were twice more likely to have type II diabetes compared to women (2016). One of the reasons for the discrepancy could be attributed to the difference in demographics of the participants. In the research done by Nordström et al., the participants were all 70 years old northern Europeans whereas this analysis includes participants from 20 years old to 65 years old Bangladeshis. Moreover, Nordström et al. observed that higher prevalence of type II diabetes in male are related to visceral fat (2016), a predictor that was not included in this analysis. 
+
+Holding everything else constant, if a person has genital thrush, he/she has 464% more odds of developing diabetes compared to a person who does not have genital thrush. If a person has partial paresis, he/she has 216% more odds of developing diabetes compared to somebody without partial paresis. If a person experience irritability, he/she will have 1388% more odds of having diabetes compared to a person who didn't have irritability. If a 48 years old person gets one year older, then the odds of having diabetes decreases by 6.7%. Holding everything else constant, if a person has visual blurring, he/she has 1598% more odds of developing diabetes compared to someone without visual blurring.
+
+Unfortunately, binned residual plot showed specific trend. As seen below, there is a downward trend and then an upward trend and a downward trend again. Three residuals were outside the significance line, and five were right on top of the significance line. It could be said that there are a few outliers in the model. 
+
+```{r, fig.width=6, fig.height=3.5}
+rawresid1 <- residuals(again22, "resp") #resp = response scale (true y-predicted probability)
+binnedplot(x=fitted(again22),y=rawresid1,xlab="Pred. probabilities",
+           col.int="red4",ylab="Avg. residuals",main="Binned residual plot",col.pts="navy")
+```
+
+VIF table for the final model is shown below. The VIF value for visual blurring and the interaction between itching and visual blurring is high. Interactions that include categorical variables are correlated in nature and thus it might have relatively high VIF scores compared to other predictors. Although there were some predictors that was notable, most of the predictor's VIF value was below 10. Therefore, it was kept in the model. 
+
+![VIF](/Users/롸/Desktop/vif.png){width=60%}
+
+Moreover, ROC curve was plotted to check the performance of the final model. The AUC value was 0.986. Considering that AUC value of 1 means that the model predicts diabetes correctly 100% of the time, our final model’s AUC value is very high. Above table shows the confusion matrix with accuracy, sensitivity and specificity values. All three values were very high as it is close to 1. Accuracy indicate the overall performance of the model. From the value of 0.92, one can say that the model’s performance is good. Sensitivity of 0.90 indicates that the model predicts 90% the people who will have diabetes but generates false-negatives 10% of the time. Specificity of 0.94 means that 94% of the time, the model will be correct in predicting people who will not have diabetes. 
+
+```{r, include=FALSE}
+pander(vif(again22))
+```
+
+```{r, include=FALSE}
+dt$age_centered <- dt$age - mean(dt$age)
+```
+
+
+```{r, , include=FALSE}
+NullModel <- glm(diabetes ~ itching, data=dt,family=binomial(link="logit"))
+FullModel <- glm(diabetes ~  age_centered + gender + polyuria + polydipsia + polyphagia + genitalthrush + visualblurring + itching + irritability + partialparesis
+         + itching:gender
+         + itching:polyphagia
+         + itching:visualblurring
+         + itching:irritability
+         + itching:partialparesis
+         + itching:genitalthrush,
+         data = dt, family = binomial(link=logit))
+
+again22 <- step(NullModel, scope = formula(FullModel),direction="both",trace=0)
+
+```
+
+```{r, , include=FALSE}
+NullModel <- glm(diabetes ~ itching, data=dt,family=binomial(link="logit"))
+FullModel <- glm(diabetes ~  age_centered + gender + polyuria + polydipsia + polyphagia + genitalthrush + visualblurring + itching + irritability + partialparesis
+         + itching:gender
+         + itching:polyphagia
+         + itching:visualblurring
+         + itching:irritability
+         + itching:partialparesis
+         + itching:genitalthrush
+         + itching:age_centered,
+         data = dt, family = binomial(link=logit))
+
+again <- step(NullModel, scope = formula(FullModel),direction="both",trace=0)
+again$call
+
+summary(again)
+```
+
+```{r, include=FALSE}
+anova(again22, again)
+```
+
+
+
+
+
+```{r, include=FALSE}
+kable(vif(final))
+```
+
+```{r, fig.width=3.7, fig.height=3.5, echo=FALSE}
+
+roc(dt$diabetes,fitted(again),plot=T,print.thres="best",legacy.axes=T,
+    print.auc =T,col="red3")
+```
+
+```{r, include=FALSE}
+Conf_mat <- confusionMatrix(as.factor(ifelse(fitted(again) >= 0.5, "1","0")),
+                            as.factor(dt$diabetes),positive = "1")
+Conf_mat$overall["Accuracy"] %>% kable(digit=2);
+Conf_mat$byClass[c("Sensitivity","Specificity")]  %>% kable(digit=4)
+```
+
+
+![Summary](/Users/롸/Desktop/conf.png){width=50%}
+
+
+# Conclusion
+
+There are also some limitations to this analysis. As demonstrated above, binned residual plots did not show randomness. Also, potentially significant variables such as BMI index, physical activity and socioeconomic status was not provided in the data. With these predictors, the model could have been more powerful in predicting diabetes. 
+
+In conclusion, itching was a significant predictor for diabetes. People who experienced itching has 83% less odds of having diabetes, compared to people who did not have itching. Other significant predictors were polydipsia, polyuria, gender, irritability, genital thrush, partial paresis, polyphagia, age, visual blurring. Also, the interaction between itching and visual blurring was statistically significant. It was observed that the odds of developing diabetes were 99% lower for people who had both visual blurring and itching compared to people who only had itching, holding everything else constant. 
+
+
+* * *
+\newpage
+
+Reference
+
+Anna Nordström, Jenny Hadrévi, Tommy Olsson, Paul W. Franks, Peter Nordström, Higher Prevalence of Type 2 Diabetes in Men Than in Women Is Associated With Differences in Visceral Fat Mass, The Journal of Clinical Endocrinology & Metabolism, Volume 101, Issue 10, 1 October 2016, Pages 3740–37
+46.
+
+Maria O. Christensen, Anna K. Berg, Karen Rytter, Eva Hommel, Jacob P. Thyssen, Jannet Svensson, and Kirsten Nørgaard.Diabetes Technology & Therapeutics.Apr 2019.215-221.
+
+Olokoba, Abdulfatai B et al. “Type 2 diabetes mellitus: a review of current trends.” Oman medical journal vol. 27,4 (2012): 269-73. doi:10.5001/omj.2012.68
+
+Oakley, Wilfrid. “Itching and Diabetes.” British Medical Journal vol. 2,5412 (1964): 818.
+
+Boyle JP, Honeycutt AA, Narayan KM.  et al.  Projection of diabetes burden through 2050: impact of changing demography and disease prevalence in the US.  Diabetes Care.2001;24:1936-1940
+
+Habib, Samira Humaira, et al. "Cost-effectiveness analysis of medical intervention in patients with early detection of diabetic foot in a tertiary care hospital in Bangladesh." Journal of Diabetes and its Complications 24.4 (2010): 259-264.
+
+Moyes, V., et al. "Insulin allergy in a patient with type 2 diabetes successfully treated with continuous subcutaneous insulin infusion." Diabetic medicine 23.2 (2006): 204-206.
+
+Pawar, Shivshakti D., et al. "The accuracy of polyuria, polydipsia, polyphagia, and Indian Diabetes Risk Score in adults screened for diabetes mellitus type-II." Medical Journal of Dr. DY Patil University 10.3 (2017): 263.
+
+Rahim, M. A., et al. "Rising prevalence of type 2 diabetes in rural Bangladesh: a population based study." Diabetes research and clinical practice 77.2 (2007): 300-305.
+
+Appendix A. Codebook
+
+
+![Summary](/Users/롸/Desktop/codebook.png){width=80%}
+
+
+Appendix B. Histogram for Age
+
+```{r, fig.width=3.7, fig.height=3.5}
+hist(dt$age)
+```
