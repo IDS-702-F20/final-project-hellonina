@@ -1,0 +1,347 @@
+
+---
+title: "Predicting Type II Diabetes with Early Symptoms "
+author: "Rhayoung Park"
+date: "11/15/20"
+output: 
+    pdf_document:
+      latex_engine: xelatex
+always_allow_html: yes
+---
+
+```{r setup, include=FALSE}
+# DO NOT ALTER CODE IN THIS CHUNK
+# The very first time you use this R markdown file, you should install each of the packages below.
+# The same goes for other packages you might decide to use
+# Remember that you only need to install each R package once in R (ever -- unless you change computers).
+# All you need to do whenever you need to use the package again (after restarting the R session),
+# is to use the library function to call the package.
+# For example, type install.packages("knitr") in the console to install the knitr package. 
+knitr::opts_chunk$set(echo = FALSE)
+library(knitr)
+library(dplyr)
+library(ggplot2)
+library(lme4)
+library(pander)
+library(xtable)
+library(kableExtra)
+library(arm)
+library(pROC)
+library(e1071)
+library(caret)
+library(tidyverse)
+require(gridExtra)
+library(broom)
+library(sjPlot)
+library(ggpubr)
+library(rms)
+```
+
+
+* * *
+\newpage
+
+## Diabetes
+
+```{r, include=FALSE}
+# Enter your code for loading the data here
+dt <- read.csv('diabetes_data_upload.csv',sep = ',', header = T)
+dt$Gender <- as.factor(dt$Gender)
+dt$Polyuria <- as.factor(dt$Polyuria)
+dt$Polydipsia <- as.factor(dt$Polydipsia)
+dt$Polyphagia <- as.factor(dt$Polyphagia)
+dt$sudden.weight.loss <- as.factor(dt$sudden.weight.loss)
+dt$weakness <- as.factor(dt$weakness)
+dt$Genital.thrush <- as.factor(dt$Genital.thrush)
+dt$visual.blurring <- as.factor(dt$visual.blurring)
+dt$Itching <- as.factor(dt$Itching)
+dt$Irritability <- as.factor(dt$Irritability)
+dt$delayed.healing <- as.factor(dt$delayed.healing)
+dt$partial.paresis <- as.factor(dt$partial.paresis)
+dt$muscle.stiffness <- as.factor(dt$muscle.stiffness)
+dt$Alopecia <- as.factor(dt$Alopecia)
+dt$Obesity <- as.factor(dt$Obesity)
+dt$class <- ifelse(dt$class == 'Positive', "1", "0")
+dt$class <- as.factor(dt$class)
+dt$Age <- as.numeric(dt$Age)
+view(dt)
+```
+
+```{r, include=FALSE}
+NewNames <- c('age', 'gender', 'polyuria', 'polydipsia', 'suddenweightloss', 'weak', 'polyphagia', 'genitalthrush', 'visualblurring', 'itching', 'irritability', 'delayedhealing', 'partialparesis', 'musclestiffness', 'alopecia', 'obesity', 'diabetes')
+names(dt) <- NewNames
+```
+
+## EDA
+
+![Summary](/Users/롸/Desktop/chi.png){width=80%}
+
+### Age : median value for positive diabetes seem to be little bit higher. 
+```{r, include=FALSE}
+hist(dt$age)
+```
+
+```{r, include=FALSE}
+ggplot(dt,aes(x=age, y=diabetes, fill=age)) +
+  geom_boxplot() + coord_flip() +
+  scale_fill_brewer(palette="RdPu") +
+  labs(title="Age vs Diabetes",
+       x="Age",y="Diabetes") + 
+  theme_classic() + theme(legend.position="none")
+```
+
+### Gender : chisq result = related / for all negatives, 90% are male 
+```{r, include=FALSE}
+tapply(dt$gender, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("gender","diabetes")]))
+```
+
+### Polyuria : chisq result = related / for all neg.dia, 92% are don't have polyuria, for pos.dia, 76% have polyuria. 
+```{r, include=FALSE}
+tapply(dt$polyuria, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("polyuria","diabetes")]))
+```
+
+### polydipsia : chisq = related / for all neg.dia, 96% didn't have polydipsia, for pos.dia, 70% had polydipsia
+```{r, include=FALSE}
+tapply(dt$polydipsia, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("polydipsia","diabetes")]))
+```
+
+### suddenweightloss: chi = related / for all neg.dia, 86% did not have sudden weight loss, for pos.dia, 59% had suddenloss
+```{r, include=FALSE}
+tapply(dt$suddenweightloss, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("suddenweightloss","diabetes")]))
+```
+
+### weakness: chi p-val 4.87e-08, related / for all neg. dia, 57% did not have weakness, for pos.dia, 68% had weakness
+```{r, include=FALSE}
+tapply(dt$weak, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("weak","diabetes")]))
+```
+
+
+### polyphagia: chi p-val related / for all neg. dia, 76% did not have polyphagia, for pos.dia, 59% had weakness
+```{r, include=FALSE}
+tapply(dt$polyphagia, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("polyphagia","diabetes")]))
+```
+
+### genital thrush: chi related (p val 0.01) / for neg.diabetes, 83% did not have genital thrush, pos.dia 74% did not have genital thrush
+```{r, include=FALSE}
+tapply(dt$genitalthrush, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("genitalthrush","diabetes")]))
+```
+
+### visual blurring: chi related / for neg.dia, 71% did not have, pos.dia 45% did not have.
+```{r, include=FALSE}
+tapply(dt$visualblurring, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("visualblurring","diabetes")]))
+```
+
+### itching: chi not related (p val 0.8) / for neg.dia 50% did not have itching, pos.dia 52% did not have itching (meaningless)
+```{r, include=FALSE}
+tapply(dt$itching, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("itching","diabetes")]))
+```
+
+### irritability: chi related / for neg.dia, 92% did not have irritability, pos.dia 66% did not have irritability, 34% had.
+```{r, include=FALSE}
+tapply(dt$irritability, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("irritability","diabetes")]))
+```
+
+### delayed healing: chi not related / for neg.dia 57% did not have delayed healing, pos.dia 48% had delayed healing
+```{r, include=FALSE}
+tapply(dt$delayedhealing, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("delayedhealing","diabetes")]))
+```
+
+### partial paresis: chi related / for neg.dia 84
+```{r, include=FALSE}
+tapply(dt$partialparesis, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("partialparesis","diabetes")]))
+```
+
+### related, (0.007)
+```{r, include=FALSE}
+tapply(dt$musclestiffness, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("musclestiffness","diabetes")]))
+```
+
+```{r, include=FALSE}
+tapply(dt$alopecia, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("alopecia","diabetes")]))
+```
+
+### obesity not related (p val 0.13)
+```{r, include=FALSE}
+tapply(dt$obesity, dt$diabetes, function(x) table(x)/sum(table(x)))
+chisq.test(table(dt[,c("obesity","diabetes")]))
+```
+
+### bin age
+```{r, include=FALSE}
+dt$age_bin <- ifelse(dt$age < 31, "1", 
+                           ifelse(dt$age > 30 & dt$age <41, "2",
+                          ifelse(dt$age > 40 & dt$age < 51, "3",
+                          ifelse(dt$age > 50 & dt$age <61, "4", 
+                          ifelse(dt$age>60 & dt$age < 71, "5", "6")))))
+dt$age_bin <- factor(dt$age_bin)
+```
+
+
+
+
+```{r, include=FALSE}
+m1 = glm(diabetes ~  age_bin + gender + polyuria + polydipsia + suddenweightloss + weak + polyphagia + genitalthrush + visualblurring + itching + irritability + delayedhealing + partialparesis + musclestiffness + alopecia + obesity, data = dt, family = binomial(link=logit))
+summary(m1)
+```
+
+```{r, include=FALSE}
+table(dt$age_bin, dt$diabetes)
+```
+
+
+## checking if they have enough combinatins for interaction
+## for some age_bins do not have enough data
+```{r, include=FALSE}
+table(dt$itching, dt$age_bin)
+```
+
+```{r, include=FALSE}
+table(dt$itching, dt$gender)
+```
+
+```{r, include=FALSE}
+table(dt$itching, dt$polyphagia)
+```
+
+```{r, include=FALSE}
+table(dt$itching, dt$visualblurring)
+```
+
+```{r, include=FALSE}
+table(dt$itching, dt$irritability)
+```
+
+
+```{r, include=FALSE}
+table(dt$itching, dt$diabetes)
+```
+
+```{r, include=FALSE}
+NullModel <- glm(diabetes ~ 1, data=dt,family=binomial(link="logit"))
+FullModel <- glm(diabetes ~  age_bin + gender + polyuria + polydipsia + suddenweightloss + weak + polyphagia + genitalthrush + visualblurring + itching + irritability + delayedhealing + partialparesis + musclestiffness + alopecia + obesity, data = dt, family = binomial(link=logit))
+
+Model_stepwise <- step(NullModel, scope = formula(FullModel),direction="both",trace=0)
+Model_stepwise$call
+
+summary(Model_stepwise)
+```
+
+
+### this is the final model
+```{r, include=FALSE}
+NullModel <- glm(diabetes ~ itching, data=dt,family=binomial(link="logit"))
+FullModel <- glm(diabetes ~  age_bin + gender + polyuria + polydipsia + polyphagia + genitalthrush + visualblurring + itching + irritability + partialparesis
+         + itching:gender
+         + itching:polyphagia
+         + itching:visualblurring
+         + itching:irritability
+         + itching:partialparesis
+         + itching:genitalthrush,
+         data = dt, family = binomial(link=logit))
+
+final <- step(NullModel, scope = formula(FullModel),direction="both",trace=0)
+final$call
+
+summary(final)
+```
+
+
+$$logit \hat{y} = \hat\beta_0 + \hat\beta_a x_{itching} + \hat\beta_b x_{polydipsia} + \hat\beta_c x_{polyuria} + \hat\beta_d x_{gender} + \hat\beta_e x_{irritability} + \hat\beta_f x_{genital thrush}+\hat\beta_g x_{partial paresis} + \hat\beta_h x_{polyphagia} + \hat\beta_i x_{agecentered} + \hat\beta_j x_{visual blurring} + \hat\beta_k x_{itching:visualblurring} $$
+
+
+## overall binned residual plot 
+```{r}
+rawresid1 <- residuals(again, "resp") #resp = response scale (true y-predicted probability)
+binnedplot(x=fitted(again),y=rawresid1,xlab="Pred. probabilities",
+           col.int="red4",ylab="Avg. residuals",main="Binned residual plot",col.pts="navy")
+```
+
+```{r, include=FALSE}
+dt$age_centered <- dt$age - mean(dt$age)
+```
+
+### this is the final model
+
+```{r, include=FALSE}
+NullModel <- glm(diabetes ~ itching, data=dt,family=binomial(link="logit"))
+FullModel <- glm(diabetes ~  age_centered + gender + polyuria + polydipsia + polyphagia + genitalthrush + visualblurring + itching + irritability + partialparesis
+         + itching:gender
+         + itching:polyphagia
+         + itching:visualblurring
+         + itching:irritability
+         + itching:partialparesis
+         + itching:genitalthrush,
+         data = dt, family = binomial(link=logit))
+
+again22 <- step(NullModel, scope = formula(FullModel),direction="both",trace=0)
+
+```
+
+```{r, include=FALSE}
+NullModel <- glm(diabetes ~ itching, data=dt,family=binomial(link="logit"))
+FullModel <- glm(diabetes ~  age_centered + gender + polyuria + polydipsia + polyphagia + genitalthrush + visualblurring + itching + irritability + partialparesis
+         + itching:gender
+         + itching:polyphagia
+         + itching:visualblurring
+         + itching:irritability
+         + itching:partialparesis
+         + itching:genitalthrush
+         + itching:age_centered,
+         data = dt, family = binomial(link=logit))
+
+again <- step(NullModel, scope = formula(FullModel),direction="both",trace=0)
+again$call
+
+summary(again)
+```
+
+```{r, include=FALSE}
+anova(again22, again)
+```
+
+
+```{r}
+pander(vif(again))
+```
+
+
+
+```{r, include=FALSE}
+kable(vif(final))
+```
+
+```{r}
+
+roc(dt$diabetes,fitted(again),plot=T,print.thres="best",legacy.axes=T,
+    print.auc =T,col="red3")
+
+Conf_mat <- confusionMatrix(as.factor(ifelse(fitted(again) >= 0.5, "1","0")),
+                            as.factor(dt$diabetes),positive = "1")
+```
+
+```{r, include=FALSE}
+Conf_mat <- confusionMatrix(as.factor(ifelse(fitted(again) >= 0.5, "1","0")),
+                            as.factor(dt$diabetes),positive = "1")
+Conf_mat$overall["Accuracy"] %>% kable(digit=2);
+Conf_mat$byClass[c("Sensitivity","Specificity")]  %>% kable(digit=4)
+```
+
+
+![Summary](/Users/롸/Desktop/conf.png){width=50%}
+
+
+
